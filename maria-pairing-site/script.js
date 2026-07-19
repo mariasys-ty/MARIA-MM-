@@ -125,152 +125,17 @@ try {
       throw new Error('Invalid response from server');
     }
 
-    if (data.error) {
+      if (data.error) {
       throw new Error(data.error);
     }
-
-/**
- * Enhanced Success Result with Group Join Confirmation
- */
-function showSuccessResult(code, session) {
-  if (!elements.resultDiv) return;
-  
-  const safeCode = escapeHtml(code) || '';
-  const safeSession = escapeHtml(session) || '{}';
-  const botName = appConfig.BOT_NAME || 'MARIA-MM';
-  
-  elements.resultDiv.innerHTML = `
-    <div class="success-container">
-      
-      <!-- ✅ Main Success Header -->
-      <div class="success-header">
-        <div class="success-icon-large">✅</div>
-        <h3>${escapeHtml(botName)} Connected!</h3>
-        <p class="success-subtitle">Pairing Code Generated Successfully</p>
-      </div>
-
-      <!-- 🔢 PAIRING CODE DISPLAY -->
-      <div class="code-display">
-        <div class="code-label">Your 8-Digit Code</div>
-        <div class="code-value">${safeCode.toUpperCase().split('').join(' ')}</div>
-        <button class="copy-code-btn" onclick="manualCopyCode('${safeCode}')">
-          <i class="fas fa-copy"></i> Copy Code
-        </button>
-      </div>
-
-      <!-- 🎯 SESSION ID - Chat Bubble Style -->
-      <div class="session-id-container">
-        <div class="chat-bubble received">
-          <div class="chat-header">
-            <span class="chat-name">👤 MARIA-MM ${botName}</span>
-            <span class="chat-time">${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-          </div>
-          
-          <div class="chat-message">
-            <p class="chat-text">
-              <span class="mention">MARKMELLON</span><br>
-              <strong>${safeCode.toUpperCase()}</strong><br><br>
-              
-              <div class="session-id-highlight">
-                <span class="checkmark">✅</span>
-                <strong>SESSION ID</strong>
-                <span class="checkmark">✅</span>
-              </div>
-            </p>
-          </div>
-          
-          <!-- Session Meta Info -->
-          <div class="session-meta">
-            <h4>💾 Session Information</h4>
-            
-            <div class="session-details">
-              <div class="detail-item">
-                <span class="detail-label">📱 Session:</span>
-                <code class="code-value short-session">${safeSession.substring(0, 25)}...</code>
-                <button onclick="manualCopySession()" class="copy-mini-btn" title="Copy full session">
-                  <i class="fas fa-copy"></i>
-                </button>
-              </div>
-
-              <div class="detail-item">
-                <span class="detail-label">🔗 Full Session:</span>
-                <textarea id="sessionData" readonly>${safeSession}</textarea>
-                <button onclick="downloadSessionFile()" class="download-btn">
-                  <i class="fas fa-download"></i> Download JSON
-                </button>
-              </div>
-
-              <div class="detail-item">
-                <span class="detail-label">⏰️ Expires:</span>
-                <span class="warning-text">~2 minutes</span>
-              </div>
-
-              <div class="detail-item">
-                <span class="detail-label">👤 Bot:</span>
-                <span class="detail-value">${botName}</span>
-              </div>
-
-              <div class="detail-item">
-                <span class="detail-label">📱 For Number:</span>
-                <span class="detail-value">${fullNumber}</span>
-              </div>
-
-              <div class="detail-item">
-                <span class="detail-label">🕐 Generated:</span>
-                <span class="detail-value">${new Date().toLocaleString()}</span>
-              </div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="action-buttons-row">
-              <button onclick="resetAll()" class="btn-secondary">
-                <i class="fas fa-redo"></i> Generate New Code
-              </button>
-              
-              <a href="https://wa.me/${appConfig.CREATOR}" target="_blank" class="btn-primary">
-                <i class="fab fa-whatsapp"></i> Contact Support
-              </a>
-            </div>
-
-            <!-- Warning -->
-            <div class="session-warning">
-              <p>⚠️ Save this session securely!</p>
-              <p>You'll need it to reconnect.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Instructions Box -->
-      <div class="instructions-box">
-        <h4><i class="fas fa-info-circle"></i> How to Link:</h4>
-        <ol>
-          <li>Open <strong>WhatsApp</strong></li>
-          <li><strong>Settings → Linked Devices</strong></li>
-          <li>Tap <strong>"Link a Device"</strong></li>
-          <li>Enter code above</li>
-        </ol>
-      </div>
-
-      <!-- Result Footer -->
-      <div class="result-footer">
-        <p class="result-footer-text">
-          ✨ Generated at ${new Date().toLocaleString()}
-        </p>
-      </div>
-    </div>
-  `;
-  
-  elements.resultDiv.classList.remove('hidden');
-  
-  // Scroll to result
-  setTimeout(() => {
-    if (elements.resultDiv) {
-      elements.resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // ✅ FIX: Actually call the function to display the result on the screen!
+    if (data.success && data.code) {
+      showSuccessResult(data.code, data.session || '{}');
+    } else {
+      throw new Error('Invalid response from server: Code missing');
     }
-  }, 150);
-}
-
+    
     // Auto-copy if checkbox checked
     const autoCopyCheckbox = getEl('autoCopy');
     if (autoCopyCheckbox && autoCopyCheckbox.checked) {
