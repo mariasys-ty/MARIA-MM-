@@ -251,7 +251,7 @@ function showSuccessResult(code, session) {
       
       <div class="code-display">
         <div class="code-label">Your 8-Digit Code</div>
-        <div class="code-value">${safeCode.toUpperCase().split('').join(' ')}</div>
+        <div class="code-value">${safeCode.toUpperCase().slice(0,4)}-${safeCode.toUpperCase().slice(4)}</div>
         <button class="copy-code-btn" onclick="manualCopyCode('${safeCode}')">
           <i class="fas fa-copy"></i> Copy Code
         </button>
