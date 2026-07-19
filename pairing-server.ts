@@ -1,4 +1,3 @@
-Inspect this code then am going to send you a prompt we update it 
 
 /**
  * MARIA PAIRING SERVER v4.4 - BAILEYS V7 OFFICIAL FLOW
@@ -160,58 +159,24 @@ app.post('/pair', async (req: Request, res: Response) => {
       else if (connection === 'close') console.log(`[PAIR #${reqId}] State: Closed`);
     });
     
-   // ======================================
-// REQUEST PAIRING CODE (Baileys v7)
-// ======================================
-
-console.log(`[PAIR #${reqId}] Requesting pairing code for: ${cleaned}`);
-
-let pairingCode: string;
-
-try {
-    pairingCode = await sock.requestPairingCode(cleaned);
-
-    if (!pairingCode) {
-        throw new Error("WhatsApp returned an empty pairing code.");
-    }
-
-    console.log(`[PAIR #${reqId}] ✅ Pairing code: ${pairingCode}`);
-
-} catch (err: any) {
-
-    console.error(`[PAIR #${reqId}] requestPairingCode() failed`);
-    console.error(err);
-
-    const message =
-        err?.message ||
-        err?.output?.payload?.message ||
-        "Unknown error";
-
-    if (
-        message.toLowerCase().includes("rate") ||
-        message.toLowerCase().includes("limit")
-    ) {
-        throw Object.assign(
-            new Error("Too many pairing requests. Please wait a few minutes."),
-            { statusCode: 429 }
-        );
-    }
-
-    if (message.toLowerCase().includes("already")) {
-        throw Object.assign(
-            new Error("This WhatsApp account is already linked."),
-            { statusCode: 409 }
-        );
-    }
-
-    if (message.toLowerCase().includes("invalid")) {
-        throw Object.assign(
-            new Error("Invalid phone number."),
-            { statusCode: 400 }
-        );
-    }
-
-    throw new Error(`Pairing failed: ${message}`);
+    // ---- REQUEST PAIRING CODE IMMEDIATELY ----
+    // Official Baileys v7 Flow: Request immediately after socket creation.
+    console.log(`[PAIR #${reqId}] Requesting pairing code for: ${cleaned}`);
+    
+    let pairingCode: string;
+   try {
+  pairingCode = await sock.requestPairingCode(cleaned);
+  console.log(`[PAIR #${reqId}] ✅ Code received: ${pairingCode}`);
+} catch (codeErr) {
+  console.error(`[PAIR #${reqId}] Pairing error:`, codeErr);
+  
+  const errMsg = codeErr instanceof Error ? codeErr.message : String(codeErr);
+  
+  if (errMsg.toLowerCase().includes('rate') || errMsg.toLowerCase().includes('already')) {
+    throw Object.assign(new Error('Rate Limited'), { statusCode: 429 });
+  }
+  
+  throw codeErr;
 }
     
     // ---- SEND RESPONSE ----
@@ -280,9 +245,10 @@ try {
       });
     }
   } finally {
-    // Ensure cleanup ALWAYS runs
+  setTimeout(() => {
     cleanup();
-  }
+  }, 60000);
+}
 });
 
 // ============================================
