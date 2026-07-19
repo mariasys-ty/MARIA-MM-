@@ -57,17 +57,45 @@ async function generateCode() {
     return;
   }
 
-  const rawNumber = (elements.numberInput.value || '').trim();
-  const countryCode = (elements.countryCode && elements.countryCode.value) ? elements.countryCode.value : '+256';
-  const fullNumber = countryCode + rawNumber;
+// ============================================
+// 📱 PREPARE PHONE NUMBER
+// ============================================
 
-  if (!validateInput(rawNumber)) return;
+// Get user input
+let rawNumber = (elements.numberInput.value || "").trim();
+const countryCode = elements.countryCode?.value || "+256";
 
-  setLoadingState(true);
-  updateProgress(2);
+// Validate input
+if (!validateInput(rawNumber)) return;
 
-  try {
-    showToast('Connecting to MARIA-MM server...', 'info');
+// Remove everything except digits
+rawNumber = rawNumber.replace(/\D/g, "");
+
+// Remove leading zero (0712345678 → 712345678)
+if (rawNumber.startsWith("0")) {
+  rawNumber = rawNumber.substring(1);
+}
+
+// Remove duplicated country code if user typed it
+const cc = countryCode.replace("+", "");
+
+if (rawNumber.startsWith(cc)) {
+  rawNumber = rawNumber.substring(cc.length);
+}
+
+// Build final number
+const fullNumber = `${countryCode}${rawNumber}`;
+
+console.log("Country Code:", countryCode);
+console.log("Input:", rawNumber);
+console.log("Sending:", fullNumber);
+
+// Continue
+setLoadingState(true);
+updateProgress(2);
+
+try {
+  showToast("Connecting to MARIA-MM server...", "info");
 
     // Call backend /pair endpoint
     const response = await fetch(appConfig.API_BASE_URL + '/pair', {
