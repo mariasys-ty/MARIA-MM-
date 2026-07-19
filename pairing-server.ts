@@ -138,8 +138,9 @@ app.post('/pair', async (req: Request, res: Response) => {
     console.log(`[PAIR #${reqId}] Initializing Baileys v7 socket...`);
     sock = makeWASocket({
       auth: state,
-      logger, // Now using the 'warn' logger
-      browser: Browsers.ubuntu('MARIA-MM'),
+      logger,
+      // Use Chrome/MacOS identity - WhatsApp sometimes blocks Ubuntu pairing codes
+      browser: ['Maria MM', 'Chrome', '1.0.0'],
       markOnlineOnConnect: false,
       connectTimeoutMs: 30000,
       keepAliveIntervalMs: 30000,
@@ -148,15 +149,14 @@ app.post('/pair', async (req: Request, res: Response) => {
       printQRInTerminal: false
     });
     
-    // Register creds.update immediately as required by Baileys v7
+    // Register creds.update immediately
     sock.ev.on('creds.update', saveCreds);
     
-    // ---- WAIT FOR WHATSAPP TO BE READY FOR AUTH ----
+    // ---- WAIT FOR WHATSAPP TO BE READY ----
     console.log(`[PAIR #${reqId}] Waiting for WhatsApp socket to connect...`);
     await new Promise < void > ((resolve, reject) => {
       let isSettled = false;
       
-      // Safety timeout
       const timeout = setTimeout(() => {
         if (!isSettled) {
           isSettled = true;
@@ -164,50 +164,51 @@ app.post('/pair', async (req: Request, res: Response) => {
         }
       }, 30000);
       
-      const cleanupListeners = () => {
-        clearTimeout(timeout);
-        sock?.ev.off('connection.update', onConnectionUpdate);
-        sock?.ev.off('qr', onQr);
-      };
-      
       const onQr = () => {
         if (isSettled) return;
         isSettled = true;
-        cleanupListeners();
+        clearTimeout(timeout);
+        // DO NOT remove the connection.update listener! We need it to keep the socket alive.
+        sock?.ev.off('qr', onQr);
         console.log(`[PAIR #${reqId}] State: Ready for pairing (QR event received)`);
         resolve();
       };
       
       const onConnectionUpdate = (update: any) => {
-        if (isSettled) return;
         const { connection, qr, lastDisconnect } = update;
         
         if (connection === 'connecting') {
           console.log(`[PAIR #${reqId}] State: Connecting...`);
         }
-        else if (qr) {
+        
+        // Resolve when ready
+        if (!isSettled && (qr || connection === 'open')) {
           isSettled = true;
-          cleanupListeners();
-          console.log(`[PAIR #${reqId}] State: Ready for pairing (QR in update)`);
+          clearTimeout(timeout);
+          sock?.ev.off('qr', onQr);
+          console.log(`[PAIR #${reqId}] State: Ready for pairing`);
           resolve();
         }
-        else if (connection === 'open') {
-          isSettled = true;
-          cleanupListeners();
-          console.log(`[PAIR #${reqId}] State: Open`);
-          resolve();
+        
+        // Keep listening for 'open' (success) or 'close' (error)
+        if (connection === 'open') {
+          console.log(`[PAIR #${reqId}] State: Open - USER PAIRED SUCCESSFULLY!`);
         }
-        else if (connection === 'close') {
-          isSettled = true;
-          cleanupListeners();
-          console.log(`[PAIR #${reqId}] State: Closed`);
-          
-          // CAPTURE THE EXACT ERROR FROM WHATSAPP
+        
+        if (connection === 'close') {
           const error = lastDisconnect?.error as any;
           const statusCode = error?.output?.statusCode;
           console.error(`[PAIR #${reqId}] ❌ Disconnect Reason:`, statusCode || 'Unknown', error?.message || '');
           
-          reject(new Error('Connection Closed before opening'));
+          if (!isSettled) {
+            isSettled = true;
+            clearTimeout(timeout);
+            sock?.ev.off('qr', onQr);
+            reject(new Error('Connection Closed before opening'));
+          } else {
+            // This will tell us if the connection drops WHILE you are typing the code
+            console.error(`[PAIR #${reqId}] ❌ Connection closed DURING pairing attempt!`);
+          }
         }
       };
       
@@ -224,13 +225,10 @@ app.post('/pair', async (req: Request, res: Response) => {
       console.log(`[PAIR #${reqId}] ✅ Code received: ${pairingCode}`);
     } catch (codeErr) {
       console.error(`[PAIR #${reqId}] Pairing error:`, codeErr);
-      
       const errMsg = codeErr instanceof Error ? codeErr.message : String(codeErr);
-      
       if (errMsg.toLowerCase().includes('rate') || errMsg.toLowerCase().includes('already')) {
         throw Object.assign(new Error('Rate Limited'), { statusCode: 429 });
       }
-      
       throw codeErr;
     }
     
