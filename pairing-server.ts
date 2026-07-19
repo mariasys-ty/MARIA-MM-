@@ -138,7 +138,7 @@ app.post('/pair', async (req: Request, res: Response) => {
     console.log(`[PAIR #${reqId}] Initializing Baileys v7 socket...`);
     sock = makeWASocket({
       auth: state,
-      logger,
+      logger, // Now using the 'warn' logger
       browser: Browsers.ubuntu('MARIA-MM'),
       markOnlineOnConnect: false,
       connectTimeoutMs: 30000,
@@ -152,12 +152,11 @@ app.post('/pair', async (req: Request, res: Response) => {
     sock.ev.on('creds.update', saveCreds);
     
     // ---- WAIT FOR WHATSAPP TO BE READY FOR AUTH ----
-    // Baileys is ready to accept a pairing code request when it emits the 'qr' event.
     console.log(`[PAIR #${reqId}] Waiting for WhatsApp socket to connect...`);
     await new Promise < void > ((resolve, reject) => {
       let isSettled = false;
       
-      // Safety timeout in case it hangs
+      // Safety timeout
       const timeout = setTimeout(() => {
         if (!isSettled) {
           isSettled = true;
@@ -171,7 +170,6 @@ app.post('/pair', async (req: Request, res: Response) => {
         sock?.ev.off('qr', onQr);
       };
       
-      // Baileys v7 sometimes emits qr as a standalone event
       const onQr = () => {
         if (isSettled) return;
         isSettled = true;
@@ -182,19 +180,17 @@ app.post('/pair', async (req: Request, res: Response) => {
       
       const onConnectionUpdate = (update: any) => {
         if (isSettled) return;
-        const { connection, qr } = update;
+        const { connection, qr, lastDisconnect } = update;
         
         if (connection === 'connecting') {
           console.log(`[PAIR #${reqId}] State: Connecting...`);
         }
-        // If qr is inside the update payload, we are ready
         else if (qr) {
           isSettled = true;
           cleanupListeners();
           console.log(`[PAIR #${reqId}] State: Ready for pairing (QR in update)`);
           resolve();
         }
-        // 'open' means fully logged in (won't happen here before pairing, but safe to check)
         else if (connection === 'open') {
           isSettled = true;
           cleanupListeners();
@@ -205,6 +201,12 @@ app.post('/pair', async (req: Request, res: Response) => {
           isSettled = true;
           cleanupListeners();
           console.log(`[PAIR #${reqId}] State: Closed`);
+          
+          // CAPTURE THE EXACT ERROR FROM WHATSAPP
+          const error = lastDisconnect?.error as any;
+          const statusCode = error?.output?.statusCode;
+          console.error(`[PAIR #${reqId}] ❌ Disconnect Reason:`, statusCode || 'Unknown', error?.message || '');
+          
           reject(new Error('Connection Closed before opening'));
         }
       };
@@ -214,7 +216,6 @@ app.post('/pair', async (req: Request, res: Response) => {
     });
     
     // ---- REQUEST PAIRING CODE ----
-    // Now that the connection is confirmed ready, request the code
     console.log(`[PAIR #${reqId}] Requesting pairing code for: ${cleaned}`);
     
     let pairingCode: string;
