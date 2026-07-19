@@ -1,11 +1,20 @@
 /**
- * MARIA PAIRING SERVER v4.1 - FIXED & CLEAN
+ * MARIA PAIRING SERVER v4.4 - BAILEYS V7 OFFICIAL FLOW
+ * Fully compatible with @whiskeysockets/baileys v7.0.0-rc13+
+ * Node.js 20+ / Railway Compatible / Express 5 Ready
  */
+
+import express, { Request, Response, NextFunction } from 'express';
 import pino from 'pino';
-import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import {
+  makeWASocket,
+  useMultiFileAuthState,
+  Browsers,
+  WASocket
+} from '@whiskeysockets/baileys';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,12 +22,13 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT) || 7700;
 const logger = pino({ level: 'silent' });
+
 // App Config
 const appConfig = {
   BOT_NAME: 'MARIA-MM',
   PREFIX: '.',
   CREATOR: '256743668990',
-  FOOTER: 'markmellon the creater',
+  FOOTER: 'MarkMellon the Creator',
   GROUP_INVITE_LINK: 'https://chat.whatsapp.com/BmOS9yQR6b6CFtlI3p0iNg',
   GROUP_ID: '12036321@g.us',
   GROUP_NAME: 'MARIA-MM'
@@ -32,13 +42,11 @@ app.use(express.static(path.join(__dirname, 'maria-pairing-site')));
 // ROUTES
 // ============================================
 
-// Serve pairing website
-app.get('/', function(req, res) {
+app.get('/', (req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, 'maria-pairing-site', 'index.html'));
 });
 
-// Config endpoint
-app.get('/api/config', function(req, res) {
+app.get('/api/config', (req: Request, res: Response) => {
   res.json({
     BOT_NAME: appConfig.BOT_NAME,
     PREFIX: appConfig.PREFIX,
@@ -49,8 +57,7 @@ app.get('/api/config', function(req, res) {
   });
 });
 
-// Health check
-app.get('/health', function(req, res) {
+app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     service: 'MARIA-MM Pairing Server',
@@ -62,147 +69,113 @@ app.get('/health', function(req, res) {
 // ============================================
 // MAIN ENDPOINT: POST /pair
 // ============================================
-app.post('/pair', async function(req, res) {
-  
+app.post('/pair', async (req: Request, res: Response) => {
   const reqId = Date.now().toString(36);
-  const { number } = req.body;
-  let sock = null;
+  const { number } = req.body as { number ? : string };
   
-  console.log('[PAIR] #' + reqId + ' Request for:', number);
-
+  let sock: WASocket | null = null;
+  let tempFolder: string = path.join(__dirname, `temp_${reqId}`);
+  let isCleanedUp = false;
+  
+  console.log(`[PAIR #${reqId}] Request received for: ${number}`);
+  
+  // ============================================
+  // CLEANUP UTILITY (Idempotent)
+  // ============================================
+  const cleanup = (): void => {
+    if (isCleanedUp) return;
+    isCleanedUp = true;
+    
+    console.log(`[PAIR #${reqId}] Initiating cleanup...`);
+    
+    try {
+      if (sock?.ev) {
+        sock.ev.removeAllListeners();
+      }
+    } catch (err) {
+      console.error(`[PAIR #${reqId}] Socket cleanup error:`, err instanceof Error ? err.message : String(err));
+    }
+    
+    // Delay folder deletion to ensure FS unlocks
+    setTimeout(() => {
+      try {
+        if (fs.existsSync(tempFolder)) {
+          fs.rmSync(tempFolder, { recursive: true, force: true });
+          console.log(`[PAIR #${reqId}] Temp folder deleted.`);
+        }
+      } catch (err) {
+        console.error(`[PAIR #${reqId}] Folder deletion error:`, err instanceof Error ? err.message : String(err));
+      }
+    }, 3000);
+  };
+  
   try {
     // ---- VALIDATION ----
     if (!number) {
-      return res.status(400).json({
-        success: false,
-        error: 'Phone number required'
-      });
+      throw Object.assign(new Error('Invalid phone number'), { statusCode: 400 });
     }
-
+    
     const cleaned = String(number).replace(/[^0-9]/g, '');
     
     if (!cleaned || cleaned.length < 8 || cleaned.length > 15) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid phone number (8-15 digits with country code)'
-      });
+      throw Object.assign(new Error('Invalid phone number'), { statusCode: 400 });
     }
-
-    console.log('[PAIR] Cleaned number:', cleaned);
-
+    
+    console.log(`[PAIR #${reqId}] Cleaned number: ${cleaned}`);
+    
     // ---- SETUP TEMP FOLDER ----
-    const tempFolder = path.join(__dirname, 'temp_' + reqId);
-
     if (fs.existsSync(tempFolder)) {
       fs.rmSync(tempFolder, { recursive: true, force: true });
     }
     fs.mkdirSync(tempFolder, { recursive: true });
-
-    // ---- IMPORT BAILEYS ----
-    console.log('[PAIR] Loading baileys...');
     
-    let baileys;
-    
-    try {
-      baileys = await import('@whiskeysockets/baileys');
-      console.log('[PAIR] Using @whiskeysockets/baileys');
-    } catch (e) {
-      try {
-        baileys = await import('baileys');
-        console.log('[PAIR] Using baileys');
-      } catch (e2) {
-        console.error('[PAIR] ❌ BAILEYS NOT FOUND!');
-        return res.status(500).json({
-          success: false,
-          error: 'Baileys not installed! Run: npm install @whiskeysockets/baileys'
-        });
-      }
-    }
-
-    const makeWASocket = baileys.default?.makeWASocket || baileys.makeWASocket;
-    const useMultiFileAuthState = baileys.useMultiFileAuthState;
-    const DisconnectReason = baileys.DisconnectReason;
-    const Browsers = baileys.Browsers;
-
-    if (!makeWASocket || !useMultiFileAuthState) {
-      return res.status(500).json({
-        success: false,
-        error: 'Invalid baileys installation'
-      });
-    }
-
     // ---- CREATE AUTH STATE ----
-    console.log('[PAIR] Creating auth state...');
-   const { state, saveCreds } = await useMultiFileAuthState(tempFolder);
-
- // ---- CREATE SOCKET ----
-console.log('[PAIR] Creating socket...');
-
-sock = makeWASocket({
-  auth: state,
-  printQRInTerminal: false,
-  logger,
-  browser: Browsers ? Browsers.ubuntu('MARIA-MM') : ['MARIA-MM', 'Chrome', '1.0'],
-  markOnlineOnConnect: false,
-  connectTimeoutMs: 30000,
-  keepAliveIntervalMs: 25000
-});
-
-// Save authentication credentials
-sock.ev.on('creds.update', saveCreds);
-
-    // ---- REQUEST PAIRING CODE ----
-    console.log('[PAIR] Requesting code for:', cleaned);
+    console.log(`[PAIR #${reqId}] Creating auth state...`);
+    const { state, saveCreds } = await useMultiFileAuthState(tempFolder);
     
-    let pairingCode;
+    // ---- CREATE SOCKET ----
+    console.log(`[PAIR #${reqId}] Initializing Baileys v7 socket...`);
+    sock = makeWASocket({
+      auth: state,
+      logger,
+      browser: Browsers.ubuntu('MARIA-MM'),
+      markOnlineOnConnect: false,
+      connectTimeoutMs: 30000,
+      keepAliveIntervalMs: 30000,
+      syncFullHistory: false,
+      generateHighQualityLinkPreview: false,
+      printQRInTerminal: false
+    });
     
+    // Register creds.update immediately as required by Baileys v7
+    sock.ev.on('creds.update', saveCreds);
+    
+    // Log connection states (non-blocking)
+    sock.ev.on('connection.update', (update) => {
+      const { connection } = update;
+      if (connection === 'connecting') console.log(`[PAIR #${reqId}] State: Connecting...`);
+      else if (connection === 'open') console.log(`[PAIR #${reqId}] State: Open`);
+      else if (connection === 'close') console.log(`[PAIR #${reqId}] State: Closed`);
+    });
+    
+    // ---- REQUEST PAIRING CODE IMMEDIATELY ----
+    // Official Baileys v7 Flow: Request immediately after socket creation.
+    console.log(`[PAIR #${reqId}] Requesting pairing code for: ${cleaned}`);
+    
+    let pairingCode: string;
     try {
       pairingCode = await sock.requestPairingCode(cleaned);
-      console.log('[PAIR] ✅ Code received:', pairingCode);
+      console.log(`[PAIR #${reqId}] ✅ Code received: ${pairingCode}`);
     } catch (codeErr) {
-      const errMsg = codeErr?.message || String(codeErr);
-      console.error('[PAIR] Code error:', errMsg);
-      
-      if (errMsg.includes('already') || errMsg.includes('rate')) {
-        return res.status(429).json({
-          success: false,
-          error: 'Rate limited! Wait 5 minutes.'
-        });
+      const errMsg = codeErr instanceof Error ? codeErr.message : String(codeErr);
+      if (errMsg.toLowerCase().includes('rate') || errMsg.toLowerCase().includes('already')) {
+        throw Object.assign(new Error('Rate Limited'), { statusCode: 429 });
       }
-      
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to get code: ' + errMsg
-      });
+      throw new Error('Failed to generate pairing code.');
     }
-
-    // ---- CLEANUP SOCKET IMMEDIATELY ----
-    // We don't need to wait for connection - just send the code
-    try {
-      if (sock?.ev) {
-        sock.ev.removeAllListeners('connection.update');
-      }
-      if (typeof sock?.end === 'function') {
-        await sock.end();
-      }
-    } catch (cleanupErr) {
-      console.log('[PAIR] Cleanup done');
-    }
-
-    // ---- SCHEDULE TEMP FOLDER CLEANUP ----
-    setTimeout(function() {
-      try {
-        if (fs.existsSync(tempFolder)) {
-          fs.rmSync(tempFolder, { recursive: true, force: true });
-          console.log('[PAIR] Cleaned up temp folder');
-        }
-      } catch (e) {}
-    }, 30000);
-
-    // ============================================
-    // ✅ SUCCESS RESPONSE - THIS WAS MISSING!
-    // ============================================
-    return res.json({
+    
+    // ---- SEND RESPONSE ----
+    const responseData = {
       success: true,
       code: pairingCode,
       number: cleaned,
@@ -214,71 +187,83 @@ sock.ev.on('creds.update', saveCreds);
         '1. Open WhatsApp',
         '2. Go to Linked Devices',
         '3. Select "Link with phone number"',
-        '4. Enter: ' + pairingCode,
-        '5. Join group: ' + appConfig.GROUP_INVITE_LINK
+        `4. Enter: ${pairingCode}`,
+        `5. Join group: ${appConfig.GROUP_INVITE_LINK}`
       ],
       timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    const errorMsg = error?.message || 'Unknown error';
+    };
     
-    console.error('[PAIR] ❌ ERROR:', errorMsg);
-
-    // Cleanup socket on error
-    try {
-      if (sock?.ev) {
-        sock.ev.removeAllListeners('connection.update');
-      }
-      if (typeof sock?.end === 'function') {
-        sock.end();
-      }
-    } catch (e) {}
-
+    if (!res.headersSent) {
+      res.json(responseData);
+    }
+    
+  } catch (error: unknown) {
+    const err = error as Error & { statusCode ? : number };
+    const errorMsg = err?.message || 'Unknown error';
+    console.error(`[PAIR #${reqId}] ❌ ERROR: ${errorMsg}`);
+    
     let status = 500;
-    let userMsg = errorMsg;
-
-    if (errorMsg.includes('Timeout') || errorMsg.includes('timeout')) {
+    let userMsg = 'Failed to generate pairing code. Please try again.';
+    
+    // Map specific error messages to HTTP status codes and friendly messages
+    if (errorMsg.includes('Invalid phone')) {
+      status = 400;
+      userMsg = 'Invalid phone number format.';
+    } else if (errorMsg.includes('Timed Out')) {
       status = 408;
-      userMsg = 'Connection timed out. Check internet and retry.';
-    } else if (errorMsg.includes('Rate limited') || errorMsg.includes('RATE_LIMITED')) {
+      userMsg = 'Connection timed out. Please try again.';
+    } else if (errorMsg.includes('Rate Limited')) {
       status = 429;
-      userMsg = 'Too many requests! Wait 5 minutes.';
-    } else if (errorMsg.includes('ECONNREFUSED') || errorMsg.includes('Network')) {
+      userMsg = 'Too many requests. Please wait a few minutes.';
+    } else if (errorMsg.includes('Connection Closed') || errorMsg.includes('Connection Lost')) {
+      status = 503;
+      userMsg = 'WhatsApp service unavailable. Please try again.';
+    } else if (errorMsg.includes('Restart Required')) {
+      status = 500;
+      userMsg = 'Server temporarily unavailable. Please try again.';
+    } else if (errorMsg.includes('Logged Out')) {
+      status = 401;
+      userMsg = 'Session invalid. Please try again.';
+    } else if (errorMsg.includes('ECONNREFUSED') || errorMsg.includes('Network') || errorMsg.includes('ENOTFOUND')) {
       status = 503;
       userMsg = 'Network error. Cannot reach WhatsApp.';
+    } else if (err?.statusCode) {
+      status = err.statusCode;
+      if (status === 400) userMsg = 'Invalid phone number format.';
     }
-
+    
     if (!res.headersSent) {
-      return res.status(status).json({
+      res.status(status).json({
         success: false,
         error: userMsg,
         timestamp: new Date().toISOString()
       });
     }
+  } finally {
+    // Ensure cleanup ALWAYS runs
+    cleanup();
   }
 });
 
 // ============================================
-// ERROR HANDLING
+// ERROR HANDLING MIDDLEWARE
 // ============================================
 
-app.use(function(err, req, res, next) {
-  console.error('[SERVER] Error:', err?.message || err);
-  
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    error: `Not found: ${req.method} ${req.url}`
+  });
+});
+
+app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+  console.error('[SERVER] Unhandled Error:', err instanceof Error ? err.message : String(err));
   if (!res.headersSent) {
     res.status(500).json({
       success: false,
       error: 'Internal server error'
     });
   }
-});
-
-app.use(function(req, res) {
-  res.status(404).json({
-    success: false,
-    error: 'Not found: ' + req.method + ' ' + req.url
-  });
 });
 
 // ============================================
@@ -288,7 +273,8 @@ app.listen(PORT, () => {
   console.log('');
   console.log('╔════════════════════════════════════════════╗');
   console.log('║                                            ║');
-  console.log('║      🚀 MARIA-MM PAIRING SERVER v4.1       ║');
+  console.log('║      🚀 MARIA-MM PAIRING SERVER v4.4       ║');
+  console.log('║      (Baileys v7 Official Flow)            ║');
   console.log('║                                            ║');
   console.log(`║      🌐 Listening on port ${PORT}             ║`);
   console.log('║      ✅ Status: ONLINE                      ║');
