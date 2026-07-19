@@ -134,7 +134,7 @@ app.post('/pair', async (req: Request, res: Response) => {
     console.log(`[PAIR #${reqId}] Creating auth state...`);
     const { state, saveCreds } = await useMultiFileAuthState(tempFolder);
     
-    // ---- CREATE SOCKET ----
+       // ---- CREATE SOCKET ----
     console.log(`[PAIR #${reqId}] Initializing Baileys v7 socket...`);
     sock = makeWASocket({
       auth: state,
@@ -151,33 +151,63 @@ app.post('/pair', async (req: Request, res: Response) => {
     // Register creds.update immediately as required by Baileys v7
     sock.ev.on('creds.update', saveCreds);
     
-    // Log connection states (non-blocking)
-    sock.ev.on('connection.update', (update) => {
-      const { connection } = update;
-      if (connection === 'connecting') console.log(`[PAIR #${reqId}] State: Connecting...`);
-      else if (connection === 'open') console.log(`[PAIR #${reqId}] State: Open`);
-      else if (connection === 'close') console.log(`[PAIR #${reqId}] State: Closed`);
+    // ---- WAIT FOR CONNECTION TO OPEN ----
+    // Baileys requires the socket to be fully connected before requesting a pairing code.
+    console.log(`[PAIR #${reqId}] Waiting for WhatsApp connection to open...`);
+    await new Promise < void > ((resolve, reject) => {
+      let isSettled = false;
+      
+      // Safety timeout in case it hangs
+      const timeout = setTimeout(() => {
+        if (!isSettled) {
+          isSettled = true;
+          reject(new Error('Timed Out waiting for connection'));
+        }
+      }, 30000);
+      
+      const onConnectionUpdate = (update: any) => {
+        if (isSettled) return;
+        const { connection } = update;
+        
+        if (connection === 'connecting') {
+          console.log(`[PAIR #${reqId}] State: Connecting...`);
+        } else if (connection === 'open') {
+          isSettled = true;
+          clearTimeout(timeout);
+          sock?.ev.off('connection.update', onConnectionUpdate);
+          console.log(`[PAIR #${reqId}] State: Open`);
+          resolve();
+        } else if (connection === 'close') {
+          isSettled = true;
+          clearTimeout(timeout);
+          sock?.ev.off('connection.update', onConnectionUpdate);
+          console.log(`[PAIR #${reqId}] State: Closed`);
+          reject(new Error('Connection Closed before opening'));
+        }
+      };
+      
+      sock?.ev.on('connection.update', onConnectionUpdate);
     });
     
-    // ---- REQUEST PAIRING CODE IMMEDIATELY ----
-    // Official Baileys v7 Flow: Request immediately after socket creation.
+    // ---- REQUEST PAIRING CODE ----
+    // Now that the connection is confirmed OPEN, request the code
     console.log(`[PAIR #${reqId}] Requesting pairing code for: ${cleaned}`);
     
     let pairingCode: string;
-   try {
-  pairingCode = await sock.requestPairingCode(cleaned);
-  console.log(`[PAIR #${reqId}] ✅ Code received: ${pairingCode}`);
-} catch (codeErr) {
-  console.error(`[PAIR #${reqId}] Pairing error:`, codeErr);
-  
-  const errMsg = codeErr instanceof Error ? codeErr.message : String(codeErr);
-  
-  if (errMsg.toLowerCase().includes('rate') || errMsg.toLowerCase().includes('already')) {
-    throw Object.assign(new Error('Rate Limited'), { statusCode: 429 });
-  }
-  
-  throw codeErr;
-}
+    try {
+      pairingCode = await sock.requestPairingCode(cleaned);
+      console.log(`[PAIR #${reqId}] ✅ Code received: ${pairingCode}`);
+    } catch (codeErr) {
+      console.error(`[PAIR #${reqId}] Pairing error:`, codeErr);
+      
+      const errMsg = codeErr instanceof Error ? codeErr.message : String(codeErr);
+      
+      if (errMsg.toLowerCase().includes('rate') || errMsg.toLowerCase().includes('already')) {
+        throw Object.assign(new Error('Rate Limited'), { statusCode: 429 });
+      }
+      
+      throw codeErr;
+    }
     
     // ---- SEND RESPONSE ----
     const responseData = {
