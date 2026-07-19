@@ -2343,4 +2343,236 @@ body {
   align-items: center;
   gap: 8px;
   justify-content: center;
+} 
+/* ==================== PAIRING RESULT BOX ==================== */
+.result-success {
+  background: rgba(15, 15, 30, 0.8);
+  border: 1px solid rgba(0, 255, 204, 0.3);
+  border-radius: 16px;
+  padding: 30px;
+  margin-top: 25px;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  animation: slideIn 0.4s ease-out;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.success-header {
+  margin-bottom: 20px;
+}
+
+.success-icon-large {
+  font-size: 3.5rem;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.success-header h3 {
+  color: #00ffcc;
+  font-size: 1.8rem;
+  margin: 0 0 5px 0;
+  font-weight: 700;
+}
+
+.success-header p {
+  color: #aaa;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* Code Display Box */
+.code-display {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px dashed #00ffcc;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 25px 0;
+}
+
+.code-label {
+  color: #888;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+
+.code-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 2.8rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 4px;
+  text-shadow: 0 0 15px rgba(0, 255, 204, 0.4);
+  margin-bottom: 15px;
+  display: block;
+}
+
+.copy-code-btn {
+  background: transparent;
+  border: 1px solid #00ffcc;
+  color: #00ffcc;
+  padding: 8px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-code-btn:hover {
+  background: #00ffcc;
+  color: #000;
+  box-shadow: 0 0 15px rgba(0, 255, 204, 0.5);
+}
+
+/* Instructions Box */
+.instructions-box {
+  text-align: left;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 20px;
+  border-left: 3px solid #00ffcc;
+}
+
+.instructions-box h4 {
+  margin: 0 0 15px 0;
+  color: #fff;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.instructions-box ol {
+  padding-left: 20px;
+  color: #ccc;
+  line-height: 1.8;
+}
+
+.instructions-box ol li::marker {
+  color: #00ffcc;
+  font-weight: bold;
+}
+
+/* Session Box */
+.session-box {
+  margin-top: 20px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.session-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.copy-session-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #00ffcc;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+#sessionData {
+  width: 100%;
+  height: 80px;
+  background: #050510;
+  color: #0f0;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  resize: none;
+  readonly: true;
+}
+
+.session-warning {
+  color: #ffcc00;
+  font-size: 0.85rem;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.session-action-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: 0.3s;
+}
+
+.session-action-btn:hover {
+  background: rgba(0, 255, 204, 0.1);
+  border-color: #00ffcc;
+}
+
+/* Action Buttons */
+.action-buttons {
+  display: flex;
+  gap: 15px;
+  margin-top: 25px;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.action-btn.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #444;
+  color: #fff;
+}
+
+.action-btn.primary {
+  background: #00ffcc;
+  color: #000;
+}
+
+.action-btn.primary:hover {
+  box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
 }
