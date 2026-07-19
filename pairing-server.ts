@@ -151,9 +151,9 @@ app.post('/pair', async (req: Request, res: Response) => {
     // Register creds.update immediately as required by Baileys v7
     sock.ev.on('creds.update', saveCreds);
     
-    // ---- WAIT FOR CONNECTION TO OPEN ----
-    // Baileys requires the socket to be fully connected before requesting a pairing code.
-    console.log(`[PAIR #${reqId}] Waiting for WhatsApp connection to open...`);
+    // ---- WAIT FOR WHATSAPP TO BE READY FOR AUTH ----
+    // Baileys is ready to accept a pairing code request when it emits the 'qr' event.
+    console.log(`[PAIR #${reqId}] Waiting for WhatsApp socket to connect...`);
     await new Promise < void > ((resolve, reject) => {
       let isSettled = false;
       
@@ -161,36 +161,60 @@ app.post('/pair', async (req: Request, res: Response) => {
       const timeout = setTimeout(() => {
         if (!isSettled) {
           isSettled = true;
-          reject(new Error('Timed Out waiting for connection'));
+          reject(new Error('Timed Out waiting for WhatsApp connection'));
         }
       }, 30000);
       
+      const cleanupListeners = () => {
+        clearTimeout(timeout);
+        sock?.ev.off('connection.update', onConnectionUpdate);
+        sock?.ev.off('qr', onQr);
+      };
+      
+      // Baileys v7 sometimes emits qr as a standalone event
+      const onQr = () => {
+        if (isSettled) return;
+        isSettled = true;
+        cleanupListeners();
+        console.log(`[PAIR #${reqId}] State: Ready for pairing (QR event received)`);
+        resolve();
+      };
+      
       const onConnectionUpdate = (update: any) => {
         if (isSettled) return;
-        const { connection } = update;
+        const { connection, qr } = update;
         
         if (connection === 'connecting') {
           console.log(`[PAIR #${reqId}] State: Connecting...`);
-        } else if (connection === 'open') {
+        }
+        // If qr is inside the update payload, we are ready
+        else if (qr) {
           isSettled = true;
-          clearTimeout(timeout);
-          sock?.ev.off('connection.update', onConnectionUpdate);
+          cleanupListeners();
+          console.log(`[PAIR #${reqId}] State: Ready for pairing (QR in update)`);
+          resolve();
+        }
+        // 'open' means fully logged in (won't happen here before pairing, but safe to check)
+        else if (connection === 'open') {
+          isSettled = true;
+          cleanupListeners();
           console.log(`[PAIR #${reqId}] State: Open`);
           resolve();
-        } else if (connection === 'close') {
+        }
+        else if (connection === 'close') {
           isSettled = true;
-          clearTimeout(timeout);
-          sock?.ev.off('connection.update', onConnectionUpdate);
+          cleanupListeners();
           console.log(`[PAIR #${reqId}] State: Closed`);
           reject(new Error('Connection Closed before opening'));
         }
       };
       
       sock?.ev.on('connection.update', onConnectionUpdate);
+      sock?.ev.on('qr', onQr);
     });
     
     // ---- REQUEST PAIRING CODE ----
-    // Now that the connection is confirmed OPEN, request the code
+    // Now that the connection is confirmed ready, request the code
     console.log(`[PAIR #${reqId}] Requesting pairing code for: ${cleaned}`);
     
     let pairingCode: string;
