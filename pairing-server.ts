@@ -1,26 +1,19 @@
 /**
- * MARIA PAIRING SERVER v5.0 - PRODUCTION STABLE
+ * MARIA PAIRING SERVER v4.4 - BAILEYS V7 OFFICIAL FLOW
  * Fully compatible with @whiskeysockets/baileys v7.0.0-rc13+
  * Node.js 20+ / Railway Compatible / Express 5 Ready
- * 
- * Fixes:
- * - Prevents premature session destruction.
- * - Keeps socket alive while user enters the code.
- * - Implements robust lifecycle management and timers.
- * - Uses asynchronous filesystem APIs to prevent event loop blocking.
  */
 
 import express, { Request, Response, NextFunction } from 'express';
 import pino from 'pino';
 import path from 'path';
-import * as fs from 'fs/promises'; // Using async fs API
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import {
   makeWASocket,
   useMultiFileAuthState,
   Browsers,
-  WASocket,
-  AuthenticationState
+  WASocket
 } from '@whiskeysockets/baileys';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -30,9 +23,7 @@ const app = express();
 const PORT = Number(process.env.PORT) || 7700;
 const logger = pino({ level: 'silent' });
 
-// ============================================
-// CONFIGURATION
-// ============================================
+// App Config
 const appConfig = {
   BOT_NAME: 'MARIA-MM',
   PREFIX: '.',
@@ -43,104 +34,9 @@ const appConfig = {
   GROUP_NAME: 'MARIA-MM'
 };
 
-const PAIRING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes to enter the code
-const CRED_SAVE_DELAY_MS = 5 * 1000; // 5 seconds to ensure creds flush to disk
-
-// ============================================
-// MIDDLEWARE
-// ============================================
+// Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'maria-pairing-site')));
-
-// ============================================
-// UTILITY FUNCTIONS
-// ============================================
-
-function validatePhoneNumber(input: unknown): string {
-  if (!input) throw Object.assign(new Error('Invalid phone number'), { statusCode: 400 });
-  const cleaned = String(input).replace(/[^0-9]/g, '');
-  if (!cleaned || cleaned.length < 8 || cleaned.length > 15) {
-    throw Object.assign(new Error('Invalid phone number'), { statusCode: 400 });
-  }
-  return cleaned;
-}
-
-async function createTempAuthFolder(reqId: string): Promise<string> {
-  const folder = path.join(__dirname, `temp_${reqId}`);
-  await fs.mkdir(folder, { recursive: true });
-  console.log(`[PAIR #${reqId}] Auth folder created.`);
-  return folder;
-}
-
-function createBaileysSocket(state: AuthenticationState, reqId: string): WASocket {
-  console.log(`[PAIR #${reqId}] Initializing Baileys v7 socket...`);
-  return makeWASocket({
-    auth: state,
-    logger,
-    browser: Browsers.ubuntu('MARIA-MM'),
-    markOnlineOnConnect: false,
-    connectTimeoutMs: 30000,
-    keepAliveIntervalMs: 30000,
-    syncFullHistory: false,
-    generateHighQualityLinkPreview: false,
-    printQRInTerminal: false
-  });
-}
-
-async function generatePairingCode(sock: WASocket, phoneNumber: string, reqId: string): Promise<string> {
-  try {
-    console.log(`[PAIR #${reqId}] Requesting pairing code for: ${phoneNumber}`);
-    const code = await sock.requestPairingCode(phoneNumber);
-    console.log(`[PAIR #${reqId}] ✅ Code generated: ${code}`);
-    return code;
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    if (errMsg.toLowerCase().includes('rate') || errMsg.toLowerCase().includes('already')) {
-      throw Object.assign(new Error('Rate Limited'), { statusCode: 429 });
-    }
-    throw Object.assign(new Error('Failed to generate pairing code.'), { statusCode: 500 });
-  }
-}
-
-function sendSuccessResponse(res: Response, pairingCode: string, phoneNumber: string): void {
-  res.json({
-    success: true,
-    code: pairingCode,
-    number: phoneNumber,
-    message: 'Enter this code in WhatsApp',
-    groupLink: appConfig.GROUP_INVITE_LINK,
-    groupName: appConfig.GROUP_NAME,
-    botName: appConfig.BOT_NAME,
-    instructions: [
-      '1. Open WhatsApp',
-      '2. Go to Linked Devices',
-      '3. Select "Link with phone number"',
-      `4. Enter: ${pairingCode}`,
-      `5. Join group: ${appConfig.GROUP_INVITE_LINK}`
-    ],
-    timestamp: new Date().toISOString()
-  });
-}
-
-function sendErrorResponse(res: Response, status: number, message: string): void {
-  let userMsg = 'Failed to generate pairing code. Please try again.';
-  
-  if (message.includes('Invalid phone')) userMsg = 'Invalid phone number format.';
-  else if (message.includes('Timed Out')) userMsg = 'Connection timed out. Please try again.';
-  else if (message.includes('Rate Limited')) userMsg = 'Too many requests. Please wait a few minutes.';
-  else if (message.includes('Connection Closed') || message.includes('Connection Lost')) userMsg = 'WhatsApp service unavailable. Please try again.';
-  else if (message.includes('Restart Required')) userMsg = 'Server temporarily unavailable. Please try again.';
-  else if (message.includes('Logged Out')) userMsg = 'Session invalid. Please try again.';
-  else if (message.includes('ECONNREFUSED') || message.includes('Network') || message.includes('ENOTFOUND')) userMsg = 'Network error. Cannot reach WhatsApp.';
-
-  if (!res.headersSent) {
-    res.status(status).json({
-      success: false,
-      error: userMsg,
-      timestamp: new Date().toISOString()
-    });
-  }
-}
 
 // ============================================
 // ROUTES
@@ -175,124 +71,177 @@ app.get('/health', (req: Request, res: Response) => {
 // ============================================
 app.post('/pair', async (req: Request, res: Response) => {
   const reqId = Date.now().toString(36);
+  const { number } = req.body as { number ? : string };
   
   let sock: WASocket | null = null;
-  let tempFolder: string | null = null;
+  let tempFolder: string = path.join(__dirname, `temp_${reqId}`);
   let isCleanedUp = false;
-  let isResponseSent = false;
-  const activeTimers: NodeJS.Timeout[] = [];
-
+  
+  console.log(`[PAIR #${reqId}] Request received for: ${number}`);
+  
   // ============================================
-  // CLEANUP UTILITY (Idempotent & Safe)
+  // CLEANUP UTILITY (Idempotent)
   // ============================================
-  const cleanupSession = async (): Promise<void> => {
+  const cleanup = (): void => {
     if (isCleanedUp) return;
     isCleanedUp = true;
     
     console.log(`[PAIR #${reqId}] Initiating cleanup...`);
     
-    // Clear all active timers to prevent memory leaks
-    activeTimers.forEach(timer => clearTimeout(timer));
-    
-    // Gracefully shutdown socket listeners
     try {
       if (sock?.ev) {
         sock.ev.removeAllListeners();
       }
     } catch (err) {
-      console.error(`[PAIR #${reqId}] Socket listener cleanup error:`, err instanceof Error ? err.message : String(err));
-    } finally {
-      sock = null; // Dereference for GC
+      console.error(`[PAIR #${reqId}] Socket cleanup error:`, err instanceof Error ? err.message : String(err));
     }
     
-    // Asynchronously delete temp folder
-    if (tempFolder) {
+    // Delay folder deletion to ensure FS unlocks
+    setTimeout(() => {
       try {
-        await fs.rm(tempFolder, { recursive: true, force: true });
-        console.log(`[PAIR #${reqId}] Temp folder deleted.`);
+        if (fs.existsSync(tempFolder)) {
+          fs.rmSync(tempFolder, { recursive: true, force: true });
+          console.log(`[PAIR #${reqId}] Temp folder deleted.`);
+        }
       } catch (err) {
         console.error(`[PAIR #${reqId}] Folder deletion error:`, err instanceof Error ? err.message : String(err));
       }
-    }
+    }, 3000);
   };
-
-  // Handle client disconnecting abruptly before code is generated
-  req.on('close', async () => {
-    if (!res.writableEnded) {
-      console.log(`[PAIR #${reqId}] Client aborted request. Cleaning up.`);
-      await cleanupSession();
-    }
-  });
-
+  
   try {
-    // 1. Validate Input
-    const phoneNumber = validatePhoneNumber(req.body?.number);
+    // ---- VALIDATION ----
+    if (!number) {
+      throw Object.assign(new Error('Invalid phone number'), { statusCode: 400 });
+    }
     
-    // 2. Setup Auth State
-    tempFolder = await createTempAuthFolder(reqId);
+    const cleaned = String(number).replace(/[^0-9]/g, '');
+    
+    if (!cleaned || cleaned.length < 8 || cleaned.length > 15) {
+      throw Object.assign(new Error('Invalid phone number'), { statusCode: 400 });
+    }
+    
+    console.log(`[PAIR #${reqId}] Cleaned number: ${cleaned}`);
+    
+    // ---- SETUP TEMP FOLDER ----
+    if (fs.existsSync(tempFolder)) {
+      fs.rmSync(tempFolder, { recursive: true, force: true });
+    }
+    fs.mkdirSync(tempFolder, { recursive: true });
+    
+    // ---- CREATE AUTH STATE ----
+    console.log(`[PAIR #${reqId}] Creating auth state...`);
     const { state, saveCreds } = await useMultiFileAuthState(tempFolder);
     
-    // 3. Create Socket
-    sock = createBaileysSocket(state, reqId);
+    // ---- CREATE SOCKET ----
+    console.log(`[PAIR #${reqId}] Initializing Baileys v7 socket...`);
+    sock = makeWASocket({
+      auth: state,
+      logger,
+      browser: Browsers.ubuntu('MARIA-MM'),
+      markOnlineOnConnect: false,
+      connectTimeoutMs: 30000,
+      keepAliveIntervalMs: 30000,
+      syncFullHistory: false,
+      generateHighQualityLinkPreview: false,
+      printQRInTerminal: false
+    });
     
-    // 4. Register creds.update immediately
+    // Register creds.update immediately as required by Baileys v7
     sock.ev.on('creds.update', saveCreds);
     
-    // 5. Setup Connection Monitor & Timers
-    // Global timeout for the entire pairing process
-    const timeoutTimer = setTimeout(async () => {
-      console.log(`[PAIR #${reqId}] Global pairing timeout reached. Cleaning up.`);
-      if (!isResponseSent) {
-        sendErrorResponse(res, 408, 'Timed Out');
-        isResponseSent = true;
-      }
-      await cleanupSession();
-    }, PAIRING_TIMEOUT_MS);
-    activeTimers.push(timeoutTimer);
-
-    // Monitor connection state
-    sock.ev.on('connection.update', async (update) => {
-      if (isCleanedUp) return;
+    // Log connection states (non-blocking)
+    sock.ev.on('connection.update', (update) => {
       const { connection } = update;
-      
-      if (connection === 'connecting') {
-        console.log(`[PAIR #${reqId}] State: Connecting...`);
-      } else if (connection === 'open') {
-        console.log(`[PAIR #${reqId}] State: Open. Pairing successful. Credentials saved.`);
-        // Wait a few seconds to ensure all creds are written to disk, then cleanup
-        const saveTimer = setTimeout(async () => {
-          console.log(`[PAIR #${reqId}] Post-open cleanup triggered.`);
-          await cleanupSession();
-        }, CRED_SAVE_DELAY_MS);
-        activeTimers.push(saveTimer);
-      } else if (connection === 'close') {
-        console.log(`[PAIR #${reqId}] State: Closed. Cleaning up.`);
-        await cleanupSession();
-      }
+      if (connection === 'connecting') console.log(`[PAIR #${reqId}] State: Connecting...`);
+      else if (connection === 'open') console.log(`[PAIR #${reqId}] State: Open`);
+      else if (connection === 'close') console.log(`[PAIR #${reqId}] State: Closed`);
     });
-
-    // 6. Request Pairing Code
-    const pairingCode = await generatePairingCode(sock, phoneNumber, reqId);
     
-    // 7. Send Response Immediately (Keep socket alive in background)
-    if (!isResponseSent) {
-      sendSuccessResponse(res, pairingCode, phoneNumber);
-      isResponseSent = true;
+    // ---- REQUEST PAIRING CODE IMMEDIATELY ----
+    // Official Baileys v7 Flow: Request immediately after socket creation.
+    console.log(`[PAIR #${reqId}] Requesting pairing code for: ${cleaned}`);
+    
+    let pairingCode: string;
+    try {
+      pairingCode = await sock.requestPairingCode(cleaned);
+      console.log(`[PAIR #${reqId}] ✅ Code received: ${pairingCode}`);
+    } catch (codeErr) {
+      const errMsg = codeErr instanceof Error ? codeErr.message : String(codeErr);
+      if (errMsg.toLowerCase().includes('rate') || errMsg.toLowerCase().includes('already')) {
+        throw Object.assign(new Error('Rate Limited'), { statusCode: 429 });
+      }
+      throw new Error('Failed to generate pairing code.');
     }
     
-    // NOTE: We intentionally DO NOT call cleanupSession() here in a finally block.
-    // The socket must remain alive while the user enters the code on their phone.
-    // Cleanup is handled by the connection.update 'open' event or the timeout.
+    // ---- SEND RESPONSE ----
+    const responseData = {
+      success: true,
+      code: pairingCode,
+      number: cleaned,
+      message: 'Enter this code in WhatsApp',
+      groupLink: appConfig.GROUP_INVITE_LINK,
+      groupName: appConfig.GROUP_NAME,
+      botName: appConfig.BOT_NAME,
+      instructions: [
+        '1. Open WhatsApp',
+        '2. Go to Linked Devices',
+        '3. Select "Link with phone number"',
+        `4. Enter: ${pairingCode}`,
+        `5. Join group: ${appConfig.GROUP_INVITE_LINK}`
+      ],
+      timestamp: new Date().toISOString()
+    };
     
-  } catch (error) {
-    console.error(`[PAIR #${reqId}] Error:`, error instanceof Error ? error.message : String(error));
-    if (!isResponseSent) {
-      const err = error as Error & { statusCode?: number };
-      sendErrorResponse(res, err.statusCode || 500, err.message || 'Unknown error');
-      isResponseSent = true;
+    if (!res.headersSent) {
+      res.json(responseData);
     }
-    // If an error occurs before the response is sent, clean up immediately
-    await cleanupSession();
+    
+  } catch (error: unknown) {
+    const err = error as Error & { statusCode ? : number };
+    const errorMsg = err?.message || 'Unknown error';
+    console.error(`[PAIR #${reqId}] ❌ ERROR: ${errorMsg}`);
+    
+    let status = 500;
+    let userMsg = 'Failed to generate pairing code. Please try again.';
+    
+    // Map specific error messages to HTTP status codes and friendly messages
+    if (errorMsg.includes('Invalid phone')) {
+      status = 400;
+      userMsg = 'Invalid phone number format.';
+    } else if (errorMsg.includes('Timed Out')) {
+      status = 408;
+      userMsg = 'Connection timed out. Please try again.';
+    } else if (errorMsg.includes('Rate Limited')) {
+      status = 429;
+      userMsg = 'Too many requests. Please wait a few minutes.';
+    } else if (errorMsg.includes('Connection Closed') || errorMsg.includes('Connection Lost')) {
+      status = 503;
+      userMsg = 'WhatsApp service unavailable. Please try again.';
+    } else if (errorMsg.includes('Restart Required')) {
+      status = 500;
+      userMsg = 'Server temporarily unavailable. Please try again.';
+    } else if (errorMsg.includes('Logged Out')) {
+      status = 401;
+      userMsg = 'Session invalid. Please try again.';
+    } else if (errorMsg.includes('ECONNREFUSED') || errorMsg.includes('Network') || errorMsg.includes('ENOTFOUND')) {
+      status = 503;
+      userMsg = 'Network error. Cannot reach WhatsApp.';
+    } else if (err?.statusCode) {
+      status = err.statusCode;
+      if (status === 400) userMsg = 'Invalid phone number format.';
+    }
+    
+    if (!res.headersSent) {
+      res.status(status).json({
+        success: false,
+        error: userMsg,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } finally {
+    // Ensure cleanup ALWAYS runs
+    cleanup();
   }
 });
 
@@ -324,8 +273,8 @@ app.listen(PORT, () => {
   console.log('');
   console.log('╔════════════════════════════════════════════╗');
   console.log('║                                            ║');
-  console.log('║      🚀 MARIA-MM PAIRING SERVER v5.0       ║');
-  console.log('║      (Baileys v7 Production Flow)          ║');
+  console.log('║      🚀 MARIA-MM PAIRING SERVER v4.4       ║');
+  console.log('║      (Baileys v7 Official Flow)            ║');
   console.log('║                                            ║');
   console.log(`║      🌐 Listening on port ${PORT}             ║`);
   console.log('║      ✅ Status: ONLINE                      ║');
