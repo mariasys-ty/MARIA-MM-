@@ -2,10 +2,10 @@
   "name": "MARIA-MM",
   "version": "3.3.0",
   "description": "Advanced WhatsApp Bot - MARIA MM",
-  "main": "index.ts",
+ "main": "pairing-server.ts",
   "type": "module",
   "scripts": {
-   "start": " npx tsx pairing-server.ts",
+  "start": "npx tsx pairing-server.ts",
     "dev": "tsx watch index.ts",
     "build": "echo 'No build step needed - using tsx'"
   },
