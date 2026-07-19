@@ -302,7 +302,7 @@ app.post('/pair', async (req: Request, res: Response) => {
   } finally {
   setTimeout(() => {
     cleanup();
-  }, 60000);
+  }, 180000);
 }
 });
 
