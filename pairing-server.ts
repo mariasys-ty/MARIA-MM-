@@ -140,7 +140,7 @@ app.post('/pair', async (req: Request, res: Response) => {
       auth: state,
       logger,
       // Use Chrome/MacOS identity - WhatsApp sometimes blocks Ubuntu pairing codes
-      browser: ['Maria MM', 'Chrome', '1.0.0'],
+      browser: Browsers.ubuntu('MARIA-MM'),
       markOnlineOnConnect: false,
       connectTimeoutMs: 30000,
       keepAliveIntervalMs: 30000,
@@ -347,3 +347,38 @@ app.listen(PORT, () => {
   console.log(`  ❤️  GET  /health      → Health Check`);
   console.log('');
 });
+// ============================================
+// DIRECT SERVER TEST
+// ============================================
+async function testPairing() {
+  console.log('--- STARTING DIRECT TEST ---');
+  const tempFolder = path.join(__dirname, 'test_temp_folder');
+  if (fs.existsSync(tempFolder)) fs.rmSync(tempFolder, { recursive: true, force: true });
+  fs.mkdirSync(tempFolder, { recursive: true });
+  
+  const { state, saveCreds } = await useMultiFileAuthState(tempFolder);
+  const sock = makeWASocket({
+    auth: state,
+    logger,
+    browser: Browsers.ubuntu('MARIA-MM'),
+    printQRInTerminal: false
+  });
+  
+  sock.ev.on('creds.update', saveCreds);
+  
+  sock.ev.on('connection.update', (update) => {
+    console.log('Connection Update:', JSON.stringify(update));
+    if (update.connection === 'open') {
+      console.log('✅✅✅ SUCCESS! DEVICE LINKED SUCCESSFULLY! ✅✅✅');
+    }
+  });
+  
+  // Put YOUR phone number here
+  const code = await sock.requestPairingCode('256743668990');
+  console.log('=================================');
+  console.log('👉 YOUR TEST PAIRING CODE IS:', code);
+  console.log('👉 TYPE THIS INTO WHATSAPP NOW!');
+  console.log('=================================');
+}
+
+testPairing();
