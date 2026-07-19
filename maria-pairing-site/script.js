@@ -236,24 +236,32 @@ function updateProgress(step) {
 // ============================================
 function showSuccessResult(code, session) {
   if (!elements.resultDiv) return;
-
+  
   const safeCode = escapeHtml(code) || '';
   const safeSession = escapeHtml(session) || '{}';
-  const botName = appConfig.BOT_NAME || 'MARIA-BOT';
-
+  const botName = appConfig.BOT_NAME || 'MARIA-MM';
+  
+  // Auto-copy code to clipboard immediately
+  safeCopyToClipboard(safeCode, 'Code copied to clipboard!');
+  
   elements.resultDiv.innerHTML = `
     <div class="result-success">
       <div class="success-header">
         <div class="success-icon-large">✅</div>
         <h3>${escapeHtml(botName)} Connected!</h3>
-        <p>Your pairing code is below</p>
+        <p>Your pairing code is ready</p>
       </div>
       
+      <div class="redirect-notice">
+        <i class="fas fa-clock"></i> Opening WhatsApp in <span id="countdown">3</span> seconds...<br>
+        <small>Code copied to clipboard! Paste it when prompted.</small>
+      </div>
+
       <div class="code-display">
         <div class="code-label">Your 8-Digit Code</div>
         <div class="code-value">${safeCode.toUpperCase().slice(0,4)}-${safeCode.toUpperCase().slice(4)}</div>
         <button class="copy-code-btn" onclick="manualCopyCode('${safeCode}')">
-          <i class="fas fa-copy"></i> Copy Code
+          <i class="fas fa-copy"></i> Copy Code Again
         </button>
       </div>
 
@@ -263,7 +271,8 @@ function showSuccessResult(code, session) {
           <li>Open <strong>WhatsApp</strong></li>
           <li><strong>Settings → Linked Devices</strong></li>
           <li>Tap <strong>"Link a Device"</strong></li>
-          <li>Enter code above</li>
+          <li>Tap <strong>"Link with phone number instead"</strong></li>
+          <li>Paste or enter the code above</li>
         </ol>
       </div>
 
@@ -289,17 +298,30 @@ function showSuccessResult(code, session) {
       </div>
 
       <div class="action-buttons">
+        <button class="action-btn primary" onclick="openWhatsAppApp()">
+          <i class="fab fa-whatsapp"></i> Open WhatsApp Now
+        </button>
         <button class="action-btn secondary" onclick="resetAll()">
           <i class="fas fa-redo"></i> Generate New
         </button>
-        ${appConfig.CREATOR ? `<a href="https://wa.me/${appConfig.CREATOR}" class="action-btn primary" target="_blank">
-          <i class="fab fa-whatsapp"></i> Support
-        </a>` : ''}
       </div>
     </div>
   `;
   
   elements.resultDiv.classList.remove('hidden');
+  
+  // Start countdown and redirect
+  let count = 3;
+  const interval = setInterval(function() {
+    count--;
+    const cdEl = document.getElementById('countdown');
+    if (cdEl) cdEl.textContent = count;
+    
+    if (count <= 0) {
+      clearInterval(interval);
+      openWhatsAppApp();
+    }
+  }, 1000);
   
   setTimeout(function() {
     if (elements.resultDiv) {
@@ -307,6 +329,21 @@ function showSuccessResult(code, session) {
     }
   }, 150);
 }
+
+// ============================================
+// 📱 OPEN WHATSAPP APP FUNCTION
+// ============================================
+window.openWhatsAppApp = function() {
+  console.log('[Redirect] Attempting to open WhatsApp app...');
+  
+  // For mobile devices, this will attempt to open the WhatsApp app directly
+  window.location.href = 'whatsapp://';
+  
+  // Fallback: If the app doesn't open in 1.5 seconds, open the web version
+  setTimeout(function() {
+    window.open('https://web.whatsapp.com/', '_blank');
+  }, 1500);
+};
 
 function showErrorResult(message) {
   if (!elements.resultDiv) return;
