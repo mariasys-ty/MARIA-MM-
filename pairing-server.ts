@@ -13,7 +13,10 @@ import {
   Browsers,
   WASocket
 } from '@whiskeysockets/baileys';
-import { SocksProxyAgent } from 'socks-proxy-agent'; // <-- CHANGED
+
+// Bulletproof import for socks-proxy-agent (handles both ESM and CommonJS)
+import * as SocksProxyAgentModule from 'socks-proxy-agent';
+const SocksProxyAgent = (SocksProxyAgentModule as any).default || (SocksProxyAgentModule as any).SocksProxyAgent;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,9 +32,8 @@ const PROXY_USER = 'KjZxjF';
 const PROXY_PASS = 'G6Pbs6';
 const PROXY_IP = '193.31.102.44';
 const PROXY_PORT = '9594';
-const proxyUrl = `socks5://${PROXY_USER}:${PROXY_PASS}@${PROXY_IP}:${PROXY_PORT}`; // <-- CHANGED
-const proxyAgent = new SocksProxyAgent(proxyUrl); // <-- CHANGED
-
+const proxyUrl = `socks5://${PROXY_USER}:${PROXY_PASS}@${PROXY_IP}:${PROXY_PORT}`;
+const proxyAgent = new SocksProxyAgent(proxyUrl);
 
 // App Config
 const appConfig = {
