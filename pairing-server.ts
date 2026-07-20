@@ -14,9 +14,9 @@ import {
   WASocket
 } from '@whiskeysockets/baileys';
 
-// Bulletproof import for socks-proxy-agent (handles both ESM and CommonJS)
-import * as SocksProxyAgentModule from 'socks-proxy-agent';
-const SocksProxyAgent = (SocksProxyAgentModule as any).default || (SocksProxyAgentModule as any).SocksProxyAgent;
+// Bulletproof import for https-proxy-agent (handles both ESM and CommonJS)
+import * as HttpsProxyAgentModule from 'https-proxy-agent';
+const HttpsProxyAgent = (HttpsProxyAgentModule as any).default || (HttpsProxyAgentModule as any).HttpsProxyAgent;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,7 +33,7 @@ const PROXY_PASS = 'fKrdbn';
 const PROXY_IP = '23.229.76.144';
 const PROXY_PORT = '8000';
 const proxyUrl = `http://${PROXY_USER}:${PROXY_PASS}@${PROXY_IP}:${PROXY_PORT}`;
-const proxyAgent = HttpsProxyAgent(proxyUrl);
+const proxyAgent = new HttpsProxyAgent(proxyUrl);
 
 // App Config
 const appConfig = {
@@ -45,6 +45,8 @@ const appConfig = {
   GROUP_ID: '12036321@g.us',
   GROUP_NAME: 'MARIA-MM'
 };
+
+
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -151,7 +153,7 @@ app.post('/pair', async (req: Request, res: Response) => {
       auth: state,
       logger,
       // Reverted back to Ubuntu as it is the official Baileys standard
-      browser: Browsers.macOS('MARIA-MM'),
+      browser: Browsers.ubuntu('MARIA-MM'),
       markOnlineOnConnect: false,
       connectTimeoutMs: 60000,
       keepAliveIntervalMs: 30000,
