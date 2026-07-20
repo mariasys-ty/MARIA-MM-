@@ -168,7 +168,7 @@ app.post('/pair', async (req: Request, res: Response) => {
       syncFullHistory: false,
       generateHighQualityLinkPreview: false,
       printQRInTerminal: false,
-      agent: proxyAgent
+      
     });
     
     // Register creds.update immediately
