@@ -140,7 +140,7 @@ app.post('/pair', async (req: Request, res: Response) => {
       auth: state,
       logger,
       // Use Chrome/MacOS identity - WhatsApp sometimes blocks Ubuntu pairing codes
-      browser: Browsers.macOS('Desktop'),
+      browser: Browsers.windows("Chrome"),
       markOnlineOnConnect: false,
       connectTimeoutMs: 30000,
       keepAliveIntervalMs: 30000,
