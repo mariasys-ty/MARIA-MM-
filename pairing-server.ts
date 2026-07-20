@@ -150,18 +150,16 @@ app.post('/pair', async (req: Request, res: Response) => {
     // ---- CREATE SOCKET ----
     console.log(`[PAIR #${reqId}] Initializing Baileys v7 socket with Proxy...`);
     sock = makeWASocket({
-      auth: state,
-      logger,
-      // Reverted back to Ubuntu as it is the official Baileys standard
-      browser: Browsers.ubuntu('MARIA-MM'),
-      markOnlineOnConnect: false,
-      connectTimeoutMs: 60000,
-      keepAliveIntervalMs: 30000,
-      syncFullHistory: false,
-      generateHighQualityLinkPreview: false,
-      printQRInTerminal: false,
-      agent: proxyAgent // <--- PROXY IS NOW APPLIED HERE
-    });
+  auth: state,
+  logger,
+  browser: Browsers.macOS("Desktop"),
+  markOnlineOnConnect: false,
+  connectTimeoutMs: 60000,
+  keepAliveIntervalMs: 30000,
+  syncFullHistory: false,
+  generateHighQualityLinkPreview: false,
+  printQRInTerminal: false
+   });
     
     // Register creds.update immediately
     sock.ev.on('creds.update', saveCreds);
