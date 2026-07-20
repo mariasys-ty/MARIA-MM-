@@ -1,8 +1,8 @@
-
 /**
  * MARIA PAIRING SERVER v4.4 - BAILEYS V7 OFFICIAL FLOW
  * Fully compatible with @whiskeysockets/baileys v7.0.0-rc13+
  * Node.js 20+ / Railway Compatible / Express 5 Ready
+ * + Proxy Integration to bypass WhatsApp IP bans
  */
 
 import express, { Request, Response, NextFunction } from 'express';
@@ -16,6 +16,7 @@ import {
   Browsers,
   WASocket
 } from '@whiskeysockets/baileys';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +24,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT) || 7700;
 const logger = pino({ level: 'silent' });
+
+// ============================================
+// PROXY CONFIGURATION (Proxy6)
+// ============================================
+const PROXY_USER = 'KjZxjF';
+const PROXY_PASS = 'G6Pbs6';
+const PROXY_IP = '193.31.102.44';
+const PROXY_PORT = '9594';
+const proxyUrl = `http://${PROXY_USER}:${PROXY_PASS}@${PROXY_IP}:${PROXY_PORT}`;
+const proxyAgent = new HttpsProxyAgent(proxyUrl);
 
 // App Config
 const appConfig = {
@@ -134,19 +145,20 @@ app.post('/pair', async (req: Request, res: Response) => {
     console.log(`[PAIR #${reqId}] Creating auth state...`);
     const { state, saveCreds } = await useMultiFileAuthState(tempFolder);
     
-       // ---- CREATE SOCKET ----
-    console.log(`[PAIR #${reqId}] Initializing Baileys v7 socket...`);
+    // ---- CREATE SOCKET ----
+    console.log(`[PAIR #${reqId}] Initializing Baileys v7 socket with Proxy...`);
     sock = makeWASocket({
       auth: state,
       logger,
-      // Use Chrome/MacOS identity - WhatsApp sometimes blocks Ubuntu pairing codes
-      browser: Browsers.windows("Chrome"),
+      // Reverted back to Ubuntu as it is the official Baileys standard
+      browser: Browsers.ubuntu('MARIA-MM'),
       markOnlineOnConnect: false,
       connectTimeoutMs: 30000,
       keepAliveIntervalMs: 30000,
       syncFullHistory: false,
       generateHighQualityLinkPreview: false,
-      printQRInTerminal: false
+      printQRInTerminal: false,
+      agent: proxyAgent // <--- PROXY IS NOW APPLIED HERE
     });
     
     // Register creds.update immediately
@@ -168,7 +180,6 @@ app.post('/pair', async (req: Request, res: Response) => {
         if (isSettled) return;
         isSettled = true;
         clearTimeout(timeout);
-        // DO NOT remove the connection.update listener! We need it to keep the socket alive.
         sock?.ev.off('qr', onQr);
         console.log(`[PAIR #${reqId}] State: Ready for pairing (QR event received)`);
         resolve();
@@ -181,7 +192,6 @@ app.post('/pair', async (req: Request, res: Response) => {
           console.log(`[PAIR #${reqId}] State: Connecting...`);
         }
         
-        // Resolve when ready
         if (!isSettled && (qr || connection === 'open')) {
           isSettled = true;
           clearTimeout(timeout);
@@ -190,7 +200,6 @@ app.post('/pair', async (req: Request, res: Response) => {
           resolve();
         }
         
-        // Keep listening for 'open' (success) or 'close' (error)
         if (connection === 'open') {
           console.log(`[PAIR #${reqId}] State: Open - USER PAIRED SUCCESSFULLY!`);
         }
@@ -206,7 +215,6 @@ app.post('/pair', async (req: Request, res: Response) => {
             sock?.ev.off('qr', onQr);
             reject(new Error('Connection Closed before opening'));
           } else {
-            // This will tell us if the connection drops WHILE you are typing the code
             console.error(`[PAIR #${reqId}] ❌ Connection closed DURING pairing attempt!`);
           }
         }
@@ -263,7 +271,6 @@ app.post('/pair', async (req: Request, res: Response) => {
     let status = 500;
     let userMsg = 'Failed to generate pairing code. Please try again.';
     
-    // Map specific error messages to HTTP status codes and friendly messages
     if (errorMsg.includes('Invalid phone')) {
       status = 400;
       userMsg = 'Invalid phone number format.';
@@ -298,10 +305,10 @@ app.post('/pair', async (req: Request, res: Response) => {
       });
     }
   } finally {
-  setTimeout(() => {
-    cleanup();
-  }, 180000);
-}
+    setTimeout(() => {
+      cleanup();
+    }, 180000); // Kept at 3 minutes so the user has time to type the code
+  }
 });
 
 // ============================================
@@ -333,7 +340,7 @@ app.listen(PORT, () => {
   console.log('╔════════════════════════════════════════════╗');
   console.log('║                                            ║');
   console.log('║      🚀 MARIA-MM PAIRING SERVER v4.4       ║');
-  console.log('║      (Baileys v7 Official Flow)            ║');
+  console.log('║      (Baileys v7 + Proxy Bypass)           ║');
   console.log('║                                            ║');
   console.log(`║      🌐 Listening on port ${PORT}             ║`);
   console.log('║      ✅ Status: ONLINE                      ║');
