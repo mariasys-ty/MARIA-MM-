@@ -26,14 +26,14 @@ const PORT = Number(process.env.PORT) || 7700;
 const logger = pino({ level: 'silent' });
 
 // ============================================
-// PROXY CONFIGURATION (Proxy6 - US Individual)
+// PROXY CONFIGURATION (Proxy6 - HTTP)
 // ============================================
 const PROXY_USER = 'pHW3Go';
 const PROXY_PASS = 'fKrdbn';
 const PROXY_IP = '23.229.76.144';
 const PROXY_PORT = '8000';
-const proxyUrl = `socks5://${PROXY_USER}:${PROXY_PASS}@${PROXY_IP}:${PROXY_PORT}`;
-const proxyAgent = new SocksProxyAgent(proxyUrl);
+const proxyUrl = `http://${PROXY_USER}:${PROXY_PASS}@${PROXY_IP}:${PROXY_PORT}`;
+const proxyAgent = HttpsProxyAgent(proxyUrl);
 
 // App Config
 const appConfig = {
