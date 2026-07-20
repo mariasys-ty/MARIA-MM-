@@ -253,8 +253,8 @@ function showSuccessResult(code, session) {
       </div>
       
       <div class="redirect-notice">
-        <i class="fas fa-clock"></i> Opening WhatsApp in <span id="countdown">3</span> seconds...<br>
-        <small>Code copied to clipboard! Paste it when prompted.</small>
+        <i class="fas fa-bell"></i> Opening WhatsApp Channel in <span id="countdown">3</span> seconds...<br>
+        <small>Code copied to clipboard! Please subscribe to our channel.</small>
       </div>
 
       <div class="code-display">
@@ -298,8 +298,8 @@ function showSuccessResult(code, session) {
       </div>
 
       <div class="action-buttons">
-        <button class="action-btn primary" onclick="openWhatsAppApp()">
-          <i class="fab fa-whatsapp"></i> Open WhatsApp Now
+        <button class="action-btn primary" onclick="openWhatsAppChannel()">
+          <i class="fab fa-whatsapp"></i> Join WhatsApp Channel
         </button>
         <button class="action-btn secondary" onclick="resetAll()">
           <i class="fas fa-redo"></i> Generate New
@@ -310,7 +310,7 @@ function showSuccessResult(code, session) {
   
   elements.resultDiv.classList.remove('hidden');
   
-  // Start countdown and redirect
+  // Start countdown and redirect to Channel
   let count = 3;
   const interval = setInterval(function() {
     count--;
@@ -319,7 +319,7 @@ function showSuccessResult(code, session) {
     
     if (count <= 0) {
       clearInterval(interval);
-      openWhatsAppApp();
+      openWhatsAppChannel();
     }
   }, 1000);
   
@@ -331,18 +331,12 @@ function showSuccessResult(code, session) {
 }
 
 // ============================================
-// 📱 OPEN WHATSAPP APP FUNCTION
+// 📱 OPEN WHATSAPP CHANNEL FUNCTION
 // ============================================
-window.openWhatsAppApp = function() {
-  console.log('[Redirect] Attempting to open WhatsApp app...');
-  
-  // For mobile devices, this will attempt to open the WhatsApp app directly
-  window.location.href = 'whatsapp://';
-  
-  // Fallback: If the app doesn't open in 1.5 seconds, open the web version
-  setTimeout(function() {
-    window.open('https://web.whatsapp.com/', '_blank');
-  }, 1500);
+window.openWhatsAppChannel = function() {
+  console.log('[Redirect] Opening WhatsApp Channel...');
+  // Replace with your actual channel link
+  window.open('https://whatsapp.com/channel/0029Vb8HIkI5q08jS6BrTR13', '_blank');
 };
 
 function showErrorResult(message) {
