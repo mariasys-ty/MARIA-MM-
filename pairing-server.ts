@@ -32,7 +32,7 @@ const PROXY_USER = 'KjZxjF';
 const PROXY_PASS = 'G6Pbs6';
 const PROXY_IP = '193.31.102.44';
 const PROXY_PORT = '9594';
-const proxyUrl = `socks5://${PROXY_USER}:${PROXY_PASS}@${PROXY_IP}:${PROXY_PORT}`;
+const proxyUrl = `socks5h://${PROXY_USER}:${PROXY_PASS}@${PROXY_IP}:${PROXY_PORT}`;
 const proxyAgent = new SocksProxyAgent(proxyUrl);
 
 // App Config
@@ -153,7 +153,7 @@ app.post('/pair', async (req: Request, res: Response) => {
       // Reverted back to Ubuntu as it is the official Baileys standard
       browser: Browsers.ubuntu('MARIA-MM'),
       markOnlineOnConnect: false,
-      connectTimeoutMs: 30000,
+      connectTimeoutMs: 60000,
       keepAliveIntervalMs: 30000,
       syncFullHistory: false,
       generateHighQualityLinkPreview: false,
