@@ -1,8 +1,5 @@
 /**
  * MARIA PAIRING SERVER v4.4 - BAILEYS V7 OFFICIAL FLOW
- * Fully compatible with @whiskeysockets/baileys v7.0.0-rc13+
- * Node.js 20+ / Railway Compatible / Express 5 Ready
- * + Proxy Integration to bypass WhatsApp IP bans
  */
 
 import express, { Request, Response, NextFunction } from 'express';
@@ -16,7 +13,7 @@ import {
   Browsers,
   WASocket
 } from '@whiskeysockets/baileys';
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import HttpsProxyAgent from 'https-proxy-agent'; // <-- CHANGED HERE
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,7 +30,8 @@ const PROXY_PASS = 'G6Pbs6';
 const PROXY_IP = '193.31.102.44';
 const PROXY_PORT = '9594';
 const proxyUrl = `http://${PROXY_USER}:${PROXY_PASS}@${PROXY_IP}:${PROXY_PORT}`;
-const proxyAgent = new HttpsProxyAgent(proxyUrl);
+const proxyAgent = HttpsProxyAgent(proxyUrl); // <-- CHANGED HERE
+
 
 // App Config
 const appConfig = {
