@@ -174,7 +174,7 @@ app.post('/pair', async (req: Request, res: Response) => {
           isSettled = true;
           reject(new Error('Timed Out waiting for WhatsApp connection'));
         }
-      }, 30000);
+      }, 60000);
       
       const onQr = () => {
         if (isSettled) return;
