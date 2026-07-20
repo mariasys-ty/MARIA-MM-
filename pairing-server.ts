@@ -11,7 +11,8 @@ import {
   makeWASocket,
   useMultiFileAuthState,
   Browsers,
-  WASocket
+  WASocket,
+  fetchLatestBaileysVersion
 } from '@whiskeysockets/baileys';
 
 // Bulletproof import for https-proxy-agent (handles both ESM and CommonJS)
@@ -24,6 +25,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT) || 7700;
 const logger = pino({ level: 'silent' });
+
+// Helper delay function
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // ============================================
 // PROXY CONFIGURATION (Proxy6 - HTTP)
@@ -45,8 +49,6 @@ const appConfig = {
   GROUP_ID: '12036321@g.us',
   GROUP_NAME: 'MARIA-MM'
 };
-
-
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -85,7 +87,7 @@ app.get('/health', (req: Request, res: Response) => {
 // ============================================
 app.post('/pair', async (req: Request, res: Response) => {
   const reqId = Date.now().toString(36);
-  const { number } = req.body as { number ? : string };
+  const { number } = req.body as { number ?: string };
   
   let sock: WASocket | null = null;
   let tempFolder: string = path.join(__dirname, `temp_${reqId}`);
@@ -100,11 +102,14 @@ app.post('/pair', async (req: Request, res: Response) => {
     if (isCleanedUp) return;
     isCleanedUp = true;
     
-    console.log(`[PAIR #${reqId}] Initiating cleanup...`);
+    console.log(`[PAIR #${reqId}] Cleanup started`);
     
     try {
       if (sock?.ev) {
         sock.ev.removeAllListeners();
+      }
+      if (sock?.ws) {
+        sock.end(new Error('Cleanup triggered'));
       }
     } catch (err) {
       console.error(`[PAIR #${reqId}] Socket cleanup error:`, err instanceof Error ? err.message : String(err));
@@ -115,7 +120,7 @@ app.post('/pair', async (req: Request, res: Response) => {
       try {
         if (fs.existsSync(tempFolder)) {
           fs.rmSync(tempFolder, { recursive: true, force: true });
-          console.log(`[PAIR #${reqId}] Temp folder deleted.`);
+          console.log(`[PAIR #${reqId}] Cleanup completed`);
         }
       } catch (err) {
         console.error(`[PAIR #${reqId}] Folder deletion error:`, err instanceof Error ? err.message : String(err));
@@ -147,90 +152,89 @@ app.post('/pair', async (req: Request, res: Response) => {
     console.log(`[PAIR #${reqId}] Creating auth state...`);
     const { state, saveCreds } = await useMultiFileAuthState(tempFolder);
     
+    // ---- FETCH LATEST BAILYETS VERSION ----
+    const { version } = await fetchLatestBaileysVersion();
+    
     // ---- CREATE SOCKET ----
-    console.log(`[PAIR #${reqId}] Initializing Baileys v7 socket with Proxy...`);
+    console.log(`[PAIR #${reqId}] Initializing socket...`);
     sock = makeWASocket({
-  auth: state,
-  logger,
-  browser: Browsers.macOS("Desktop"),
-  markOnlineOnConnect: false,
-  connectTimeoutMs: 60000,
-  keepAliveIntervalMs: 30000,
-  syncFullHistory: false,
-  generateHighQualityLinkPreview: false,
-  printQRInTerminal: false
-   });
+      version,
+      auth: state,
+      logger,
+      browser: Browsers.ubuntu('MARIA-MM'),
+      markOnlineOnConnect: false,
+      connectTimeoutMs: 60000,
+      keepAliveIntervalMs: 30000,
+      syncFullHistory: false,
+      generateHighQualityLinkPreview: false,
+      printQRInTerminal: false,
+      agent: proxyAgent
+    });
     
     // Register creds.update immediately
     sock.ev.on('creds.update', saveCreds);
     
-    // ---- WAIT FOR WHATSAPP TO BE READY ----
-    console.log(`[PAIR #${reqId}] Waiting for WhatsApp socket to connect...`);
-    await new Promise < void > ((resolve, reject) => {
+    // ---- WAIT FOR SOCKET TO BE READY ----
+    await new Promise<void>((resolve, reject) => {
       let isSettled = false;
       
       const timeout = setTimeout(() => {
         if (!isSettled) {
           isSettled = true;
+          console.log(`[PAIR #${reqId}] Timeout`);
           reject(new Error('Timed Out waiting for WhatsApp connection'));
         }
       }, 60000);
-      
-      const onQr = () => {
-        if (isSettled) return;
-        isSettled = true;
-        clearTimeout(timeout);
-        sock?.ev.off('qr', onQr);
-        console.log(`[PAIR #${reqId}] State: Ready for pairing (QR event received)`);
-        resolve();
-      };
       
       const onConnectionUpdate = (update: any) => {
         const { connection, qr, lastDisconnect } = update;
         
         if (connection === 'connecting') {
-          console.log(`[PAIR #${reqId}] State: Connecting...`);
+          console.log(`[PAIR #${reqId}] Connecting...`);
         }
         
         if (!isSettled && (qr || connection === 'open')) {
           isSettled = true;
           clearTimeout(timeout);
-          sock?.ev.off('qr', onQr);
-          console.log(`[PAIR #${reqId}] State: Ready for pairing`);
+          console.log(`[PAIR #${reqId}] Socket ready`);
           resolve();
         }
         
         if (connection === 'open') {
-          console.log(`[PAIR #${reqId}] State: Open - USER PAIRED SUCCESSFULLY!`);
+          console.log(`[PAIR #${reqId}] User paired successfully!`);
         }
         
         if (connection === 'close') {
           const error = lastDisconnect?.error as any;
           const statusCode = error?.output?.statusCode;
-          console.error(`[PAIR #${reqId}] ❌ Disconnect Reason:`, statusCode || 'Unknown', error?.message || '');
+          console.error(`[PAIR #${reqId}] Connection closed`, statusCode || 'Unknown', error?.message || '');
           
           if (!isSettled) {
             isSettled = true;
             clearTimeout(timeout);
-            sock?.ev.off('qr', onQr);
             reject(new Error('Connection Closed before opening'));
-          } else {
-            console.error(`[PAIR #${reqId}] ❌ Connection closed DURING pairing attempt!`);
           }
+        }
+        
+        if (connection === 'disconnect') {
+          console.error(`[PAIR #${reqId}] Disconnect detected`);
         }
       };
       
       sock?.ev.on('connection.update', onConnectionUpdate);
-      sock?.ev.on('qr', onQr);
     });
     
+    // ---- DELAY BEFORE REQUESTING CODE ----
+    console.log(`[PAIR #${reqId}] Waiting before requesting code...`);
+    await delay(3000);
+    
     // ---- REQUEST PAIRING CODE ----
-    console.log(`[PAIR #${reqId}] Requesting pairing code for: ${cleaned}`);
+    console.log(`[PAIR #${reqId}] Requesting pairing code...`);
     
     let pairingCode: string;
     try {
       pairingCode = await sock.requestPairingCode(cleaned);
-      console.log(`[PAIR #${reqId}] ✅ Code received: ${pairingCode}`);
+      console.log(`[PAIR #${reqId}] Pairing code generated: ${pairingCode}`);
     } catch (codeErr) {
       console.error(`[PAIR #${reqId}] Pairing error:`, codeErr);
       const errMsg = codeErr instanceof Error ? codeErr.message : String(codeErr);
@@ -264,7 +268,7 @@ app.post('/pair', async (req: Request, res: Response) => {
     }
     
   } catch (error: unknown) {
-    const err = error as Error & { statusCode ? : number };
+    const err = error as Error & { statusCode ?: number };
     const errorMsg = err?.message || 'Unknown error';
     console.error(`[PAIR #${reqId}] ❌ ERROR: ${errorMsg}`);
     
@@ -289,6 +293,9 @@ app.post('/pair', async (req: Request, res: Response) => {
     } else if (errorMsg.includes('Logged Out')) {
       status = 401;
       userMsg = 'Session invalid. Please try again.';
+    } else if (errorMsg.includes('Bad Session')) {
+      status = 401;
+      userMsg = 'Bad session. Please try again.';
     } else if (errorMsg.includes('ECONNREFUSED') || errorMsg.includes('Network') || errorMsg.includes('ENOTFOUND')) {
       status = 503;
       userMsg = 'Network error. Cannot reach WhatsApp.';
@@ -305,9 +312,10 @@ app.post('/pair', async (req: Request, res: Response) => {
       });
     }
   } finally {
+    // Keep socket alive for 3 minutes to allow user to type the code
     setTimeout(() => {
       cleanup();
-    }, 180000); // Kept at 3 minutes so the user has time to type the code
+    }, 180000);
   }
 });
 
