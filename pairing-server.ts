@@ -151,7 +151,7 @@ app.post('/pair', async (req: Request, res: Response) => {
       auth: state,
       logger,
       // Reverted back to Ubuntu as it is the official Baileys standard
-      browser: Browsers.ubuntu('MARIA-MM'),
+      browser: Browsers.macOS('MARIA-MM'),
       markOnlineOnConnect: false,
       connectTimeoutMs: 60000,
       keepAliveIntervalMs: 30000,
