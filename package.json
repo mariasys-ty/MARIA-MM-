@@ -2,10 +2,10 @@
   "name": "MARIA-MM",
   "version": "3.3.0",
   "description": "Advanced WhatsApp Bot - MARIA MM",
-  "main": "pairing-server.ts",
+ "main": "pairing-server.ts",
   "type": "module",
   "scripts": {
-    "start": "npx tsx pairing-server.ts",
+  "start": "npx tsx pairing-server.ts",
     "dev": "tsx watch index.ts",
     "build": "echo 'No build step needed - using tsx'"
   },
@@ -22,10 +22,10 @@
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@libsql/client": "^0.17.2",
-    "@whiskeysockets/baileys": "latest",
     "adm-zip": "^0.5.17",
     "awesome-phonenumber": "^7.8.0",
     "axios": "^1.14.0",
+    "@whiskeysockets/baileys": "npm:toxic-baileys@latest",
     "canvas": "^3.2.3",
     "chart.js": "^4.5.1",
     "chartjs-node-canvas": "^5.0.0",
@@ -50,7 +50,6 @@
     "qs": "^6.15.0",
     "ruhend-scraper": "^8.0.3",
     "sharp": "^0.34.5",
-    "socks-proxy-agent": "^2.1.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "unzipper": "^0.12.3",
