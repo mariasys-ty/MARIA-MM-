@@ -15,7 +15,8 @@ let appConfig = {
   FOOTER: 'markmellon the creater',
   MODE: 'public',
   features: {},
-  API_BASE_URL: window.location.origin
+  API_BASE_URL: window.location.origin,
+  RATE_LIMIT_SECONDS: 45 // WhatsApp requires waiting ~1 minute between codes
 };
 
 // ===== DOM ELEMENTS =====
@@ -52,14 +53,28 @@ let isLoading = false;
 // 🎯 MAIN GENERATE FUNCTION
 // ============================================
 async function generateCode() {
-  if (!elements.numberInput) {
-    showToast('Form not ready', 'error');
-    return;
-  }
-
-// ============================================
-// 📱 PREPARE PHONE NUMBER
-// ============================================
+    if (!elements.numberInput) {
+      showToast('Form not ready', 'error');
+      return;
+    }
+    
+    // ============================================
+    // ⏱️ RATE LIMIT CHECK (WhatsApp Protocol)
+    // ============================================
+    const now = Date.now();
+    const lastReqTime = parseInt(localStorage.getItem('maria_last_pair_req') || '0', 10);
+    const secondsSinceLastReq = Math.floor((now - lastReqTime) / 1000);
+    const cooldown = appConfig.RATE_LIMIT_SECONDS || 45;
+    
+    if (secondsSinceLastReq < cooldown) {
+      const waitTime = cooldown - secondsSinceLastReq;
+      showToast(`Please wait ${waitTime}s before requesting another code.`, 'warning');
+      return;
+    }
+    
+    // ============================================
+    // 📱 PREPARE PHONE NUMBER
+    // ============================================
 
 // Get user input
 let rawNumber = (elements.numberInput.value || "").trim();
@@ -95,6 +110,8 @@ setLoadingState(true);
 updateProgress(2);
 
 try {
+  // Save the timestamp to enforce rate limit
+  localStorage.setItem('maria_last_pair_req', Date.now().toString());
   showToast("Connecting to MARIA-MM server...", "info");
 
     // Call backend /pair endpoint
